@@ -1,9 +1,14 @@
-#include <Arduino.h>
+#include <NESPtonBot.h>
 
-void setup() {
-  // put your setup code here, to run once:
+NESPtonBot bot;
+
+void setup()
+{
+    bot.init();
+    bot.connect();
 }
 
-void loop() {
-  // put your main code here, to run repeatedly:
+
+void loop()
+{
 }
