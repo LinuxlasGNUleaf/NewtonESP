@@ -14,7 +14,7 @@ void NESPtonBot::connect()
 {
     if (WiFi.status() == WL_NO_SHIELD)
     {
-        Serial.println("WiFi shield not present");
+        Serial.println("WiFi shield not present! Abort.");
         while (true);
     }
     Serial.print("Connecting to "+String(ssid)+"...");
@@ -28,7 +28,6 @@ void NESPtonBot::connect()
     Serial.print(String(server) + ":" + String(port) + "...");
     while (!client.connect(server, port))
     {
-        delay(500);
         Serial.print(".");
     }
     Serial.println("connected.");
