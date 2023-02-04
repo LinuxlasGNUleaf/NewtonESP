@@ -1,15 +1,23 @@
 #ifndef BOT_CONFIG_H
 #define BOT_CONFIG_H
 
-// connection options
-inline const char *server = "192.168.178.73";
+#include <Arduino.h>
+
+// primary connection options
+inline const char *server = "192.168.74.1";
 const int port = 3490;
 
-// 
-const int discard_timeout = 1000;
-const int recv_timeout = 100;
-const int version = 9;
+// secondary connection options
+const unsigned int discard_timeout = 1000;
+const unsigned int recv_timeout = 100;
+const uint8_t version = 9;
 inline const char* name = "nESPton";
 
+const uint8_t pos_size = sizeof(double)*2;
+
+
+// game options
+const uint8_t max_players = 50;
+const uint8_t max_planets = 30;
 
 #endif
