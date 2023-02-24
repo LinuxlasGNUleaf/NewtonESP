@@ -98,23 +98,62 @@ void NESPtonBot::processRecv() {
     update_flag = true;
     break;
 
-  case 4: // shot finished
+  case 4: // shot finished, DEPRECATED
+    Serial.println("wrong bot protocol, this msg_type (4) should not be received!");
+    while (1);
     break;
 
   case 5: // shot begin
+    // angle, velocity = self.connection.receive_struct("dd")
+    client.readBytes(pos_buf, pos_size);
     break;
 
   case 6: // shot end
+    // receive angle and velocity
+    uint8_t discard_buf[pos_size];
+    client.readBytes(discard_buf, pos_size);
+
+    // receive number of segments & discard segments
+    uint8_t n_buf[sizeof(int)];
+    client.readBytes(n_buf, sizeof(int));
+    int n;
+    
+    memcpy(&n, n_buf, sizeof(int));
+    for (int i = 0; i < n; i++){
+      client.readBytes(discard_buf, sizeof(float)*2);
+    }
     break;
 
   case 7: // game mode, deprecated
+    Serial.println("wrong bot protocol, this msg_type (7) should not be received!");
+    while (1);
     break;
 
   case 8: // own energy
+    uint8_t energy_buf[sizeof(double)];
+    client.readBytes(energy_buf, sizeof(double));
+    memcpy(&energy, energy_buf, sizeof(double));
     break;
 
   case 9: // planet info
-    break;
+    uint8_t count_buf[sizeof(int)];
+    client.readBytes(count_buf, sizeof(int));
+    int count;
+    memcpy(count, count_buf)
+    /*
+    # discard planet byte count
+    self.connection.receive_struct("I")
+
+    self.planets = []
+    for i in range(payload):
+        x, y, radius, mass = self.connection.receive_struct("dddd")
+        self.planets.append(Planet(x, y, radius, mass, i))
+    self.msg(f"planet data for {len(self.planets)} planets received")
+    tmp = self.planets[-1]
+    self.update_simulation()
+
+      break;
+      */
 
   default:
     Serial.println("UNKNOWN MSG_TYPE!");
@@ -152,4 +191,18 @@ void remove_from_ignored(int arr[], int id) {
       return;
     }
   }
+}
+
+static void readInt(WiFiClient client, int* target){
+  uint8_t buf[sizeof(int)];
+  client.readBytes(buf, sizeof(int));
+  int ret_val;
+  memcpy(target, buf, sizeof(int));
+}
+
+static void readPos(WiFiClient client, int* target){
+  uint8_t buf[sizeof(int)];
+  client.readBytes(buf, sizeof(int));
+  int ret_val;
+  memcpy(target, buf, sizeof(int));
 }

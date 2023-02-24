@@ -13,6 +13,7 @@ class NESPtonBot
 private:
     WiFiClient client;
     byte id;
+    double energy;
     bool update_flag;
     // indices
     uint8_t players_index;
