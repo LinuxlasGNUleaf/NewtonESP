@@ -11,4 +11,6 @@ void setup()
 
 void loop()
 {
+    bot.processRecv();
+    delay(50);
 }

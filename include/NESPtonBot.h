@@ -35,4 +35,7 @@ bool is_ignored(int arr[], int id);
 void add_to_ignore(int arr[], int id);
 void remove_from_ignored(int arr[], int id);
 
+void recv_int(WiFiClient client, int *target);
+void discard_bytes(WiFiClient client, unsigned int byte_count);
+
 #endif
