@@ -12,6 +12,8 @@ class NESPtonBot
 {
 private:
     WiFiClient client;
+    uint8_t act_conn;
+
     byte id;
     double energy;
     bool update_flag;

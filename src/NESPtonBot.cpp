@@ -30,22 +30,33 @@ void NESPtonBot::connect()
       ;
   }
 
+  act_conn = -1;
   while (true)
   {
-    Serial.printf("CONN: Connecting to '%s'...", ssid);
-    WiFi.begin(ssid, pass);
-    while (WiFi.status() != WL_CONNECTED)
-    {
-      delay(500);
-      Serial.print(".");
+    act_conn = (act_conn+1)%conn_count;
+    if (WiFi.scanNetworks(false, false, 0, (uint8 *)ssid[act_conn]) == 0){
+      Serial.printf("CONN: Network '%s' not reachable. Skipping...\n", ssid[act_conn]);
+      continue;
     }
-    Serial.printf("done.\nCONN: Connecting to Server at %s:%d...", server, port);
-    while (!client.connect(server, port))
-    {
-      Serial.print(".");
-      delay(10);
+    Serial.printf("CONN: Connecting to NETWORK '%s'...", ssid[act_conn]);
+    WiFi.begin(ssid[act_conn], pass[act_conn]);
+    unsigned int start_time = millis();
+    while (WiFi.status() != WL_CONNECTED && millis()-start_time < conn_establish_timeout)
+      delay(50);
+    if (WiFi.status() != WL_CONNECTED){
+      Serial.printf("failed after %ds.\n", conn_establish_timeout/1000);
+      continue;
     }
-    Serial.println("CONN: connected.");
+
+    Serial.printf("done.\nCONN: Connecting to SERVER at %s:%d...", server[act_conn], port);
+    start_time = millis();
+    while (!client.connect(server[act_conn], port) && millis()-start_time < conn_establish_timeout)
+      delay(50);
+    if (!client.connected()){
+      Serial.printf("failed after %ds.\n", conn_establish_timeout/1000);
+      continue;
+    }
+    Serial.println("connected.");
 
     // set name, dump recv buffer and enable buffer mode
     client.printf("n %s\n", name);
