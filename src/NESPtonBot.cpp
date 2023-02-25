@@ -60,10 +60,10 @@ void NESPtonBot::connect()
     }
     else
     {
-      Serial.println("CONN: No response received, attempting to reconnect.");
+      Serial.printf("CONN: No response received, attempting to reconnect in %ds.\n",reconnect_wait/1000);
       client.stop();
       WiFi.disconnect(false);
-      delay(5000);
+      delay(reconnect_wait);
     }
   }
   client.printf("b %d\n", version);
@@ -232,6 +232,7 @@ void remove_from_ignored(int arr[], int id)
 
 void recv_int(WiFiClient client, int *target)
 {
+  client.setTimeout(recv_timeout);
   uint8_t buf[sizeof(int)];
   client.readBytes(buf, sizeof(int));
   memcpy(target, buf, sizeof(int));
@@ -239,6 +240,7 @@ void recv_int(WiFiClient client, int *target)
 
 void discard_bytes(WiFiClient client, unsigned int byte_count)
 {
+  client.setTimeout(discard_timeout);
   uint8_t buf;
   for (unsigned int i = 0; i < byte_count; i++)
     client.readBytes(&buf, 1);
