@@ -8,7 +8,6 @@ void setup()
     bot.connect();
 }
 
-
 void loop()
 {
     bot.processRecv();

@@ -25,6 +25,7 @@ private:
     Player *players;
     Planet *planets;
     int *ignored;
+
 public:
     NESPtonBot(/* args */);
     void init();
