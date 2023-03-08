@@ -32,12 +32,12 @@ public:
     void processRecv();
 };
 
-byte get_ignored_index(int arr[], int id);
-bool is_ignored(int arr[], int id);
-void add_to_ignore(int arr[], int id);
-void remove_from_ignored(int arr[], int id);
+byte getIgnoredIndex(int arr[], int id);
+bool isIgnored(int arr[], int id);
+void addToIgnored(int arr[], int id);
+void removeFromIgnored(int arr[], int id);
 
-void recv_int(WiFiClient client, int *target);
-void discard_bytes(WiFiClient client, unsigned int byte_count);
+void recvInt(WiFiClient *client, int *target);
+void discardBytes(WiFiClient *client, unsigned int byte_count);
 
 #endif

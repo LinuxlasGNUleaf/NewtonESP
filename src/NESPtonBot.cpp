@@ -66,7 +66,7 @@ void NESPtonBot::connect()
     if (bytes_available > 0)
     {
       Serial.printf("CONN: Response received, discarding %d bytes.\n", bytes_available);
-      discard_bytes(client, client.peekAvailable());
+      discardBytes(&client, client.peekAvailable());
       break;
     }
     else
@@ -78,7 +78,7 @@ void NESPtonBot::connect()
     }
   }
   client.printf("b %d\n", version);
-  discard_bytes(client, 2);
+  discardBytes(&client, 2);
   Serial.println();
 }
 
@@ -92,8 +92,8 @@ void NESPtonBot::processRecv()
   }
   // extract from buffer
   int msg_type, payload;
-  recv_int(client, &msg_type);
-  recv_int(client, &payload);
+  recvInt(&client, &msg_type);
+  recvInt(&client, &payload);
 
   switch (msg_type)
   {
@@ -106,7 +106,7 @@ void NESPtonBot::processRecv()
   case 2: // player leave
     // mark player inactive
     players[payload].active = false;
-    remove_from_ignored(ignored, payload);
+    removeFromIgnored(ignored, payload);
     Serial.printf("RECV: Player %d left the game.\n", payload);
     break;
 
@@ -136,14 +136,13 @@ void NESPtonBot::processRecv()
       else
       {
         // try to remove opponent from ignored list
-        remove_from_ignored(ignored, payload);
+        removeFromIgnored(ignored, payload);
       }
     }
 
     // copy player info to array
     memcpy(&players[payload], &payload, sizeof(bool));
     memcpy(&players[payload] + 2* sizeof(float), pos_buf, 2* sizeof(float));
-    update_flag = true;
     break;
 
   case 4: // shot finished, DEPRECATED
@@ -160,11 +159,11 @@ void NESPtonBot::processRecv()
 
   case 6: // shot end
     Serial.println("RECV: shot ended, discarding data.");
-    discard_bytes(client, 4 * sizeof(double));
+    discardBytes(&client, 4 * sizeof(double));
     // receive number of segments & discard segments
     int n;
-    recv_int(client, &n);
-    discard_bytes(client, n * 2 * sizeof(float));
+    recvInt(&client, &n);
+    discardBytes(&client, n * 2 * sizeof(float));
     break;
 
   case 7: // game mode, deprecated
@@ -181,8 +180,9 @@ void NESPtonBot::processRecv()
     break;
 
   case 9: // planet info
+    update_flag = true;
     int byte_count;
-    recv_int(client, &byte_count);
+    recvInt(&client, &byte_count);
 
     Planet new_planet;
     uint8_t new_planet_buf[4 * sizeof(double)];
@@ -201,7 +201,7 @@ void NESPtonBot::processRecv()
   }
 }
 
-byte get_ignored_index(int arr[], int id)
+byte getIgnoredIndex(int arr[], int id)
 {
   for (byte i = 0; i < max_players; i++)
   {
@@ -211,11 +211,11 @@ byte get_ignored_index(int arr[], int id)
   return -1;
 }
 
-bool is_ignored(int arr[], int id) { return get_ignored_index(arr, id) != -1; }
+bool isIgnored(int arr[], int id) { return getIgnoredIndex(arr, id) != -1; }
 
-void add_to_ignore(int arr[], int id)
+void addToIgnored(int arr[], int id)
 {
-  if (is_ignored(arr, id))
+  if (isIgnored(arr, id))
     return;
   for (byte i = 0; i < max_players; i++)
   {
@@ -227,9 +227,9 @@ void add_to_ignore(int arr[], int id)
   }
 }
 
-void remove_from_ignored(int arr[], int id)
+void removeFromIgnored(int arr[], int id)
 {
-  if (!is_ignored(arr, id))
+  if (!isIgnored(arr, id))
     return;
   for (byte i = 0; i < max_players; i++)
   {
@@ -241,18 +241,20 @@ void remove_from_ignored(int arr[], int id)
   }
 }
 
-void recv_int(WiFiClient client, int *target)
+void recvInt(WiFiClient *client, int *target)
 {
-  client.setTimeout(recv_timeout);
+  client->setTimeout(recv_timeout);
   uint8_t buf[sizeof(int)];
-  client.readBytes(buf, sizeof(int));
+  client->readBytes(buf, sizeof(int));
   memcpy(target, buf, sizeof(int));
 }
 
-void discard_bytes(WiFiClient client, unsigned int byte_count)
+void discardBytes(WiFiClient *client, unsigned int byte_count)
 {
-  client.setTimeout(discard_timeout);
-  uint8_t buf;
+  client->setTimeout(discard_timeout);
+  uint8_t buf = 0;
   for (unsigned int i = 0; i < byte_count; i++)
-    client.readBytes(&buf, 1);
+  {
+    client->readBytes(&buf, 1);
+  }
 }
