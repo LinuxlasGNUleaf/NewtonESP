@@ -12,7 +12,7 @@ NESPtonBot::NESPtonBot(/* args */)
   planets = new Planet[max_planets];
   ignored = new int[max_players];
 
-  for (byte i = 0; i < max_players; i++)
+  for (uint8_t i = 0; i < max_players; i++)
   {
     ignored[i] = -1;
     players[i].active = false;
@@ -201,9 +201,14 @@ void NESPtonBot::processRecv()
   }
 }
 
-byte getIgnoredIndex(int arr[], int id)
+double simShot(uint8_t target_id, double angle, double velocity){
+  
+}
+
+
+uint8_t getIgnoredIndex(int arr[], int id)
 {
-  for (byte i = 0; i < max_players; i++)
+  for (uint8_t i = 0; i < max_players; i++)
   {
     if (arr[i] == id)
       return i;
@@ -217,7 +222,7 @@ void addToIgnored(int arr[], int id)
 {
   if (isIgnored(arr, id))
     return;
-  for (byte i = 0; i < max_players; i++)
+  for (uint8_t i = 0; i < max_players; i++)
   {
     if (arr[i] == -1)
     {
@@ -231,7 +236,7 @@ void removeFromIgnored(int arr[], int id)
 {
   if (!isIgnored(arr, id))
     return;
-  for (byte i = 0; i < max_players; i++)
+  for (uint8_t i = 0; i < max_players; i++)
   {
     if (arr[i] == id)
     {
