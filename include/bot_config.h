@@ -14,8 +14,19 @@ const unsigned int reconnect_wait = 8000;
 const uint8_t version = 9;
 inline const char* name = "nESPton";
 
-// game options
-const uint8_t max_players = 50;
-const uint8_t max_planets = 30;
+// OPTIONS COPIED FROM SERVER
+const unsigned int A = 2000000;
+
+const uint8_t max_players = 12;
+const uint8_t num_planets = 24;
+
+const double battlefieldW = sqrt(A * 16 / 9); /* 1885 */
+const double battlefieldH = sqrt(A * 9 / 16); /* 1060 */
+const double player_size = 4.0;
+const int margin = 500;
+
+//fixed
+const unsigned int max_segments = 2000;
+const unsigned int segment_steps = 25;
 
 #endif

@@ -9,7 +9,7 @@ NESPtonBot::NESPtonBot(/* args */)
   planets_index = 0;
 
   players = new Player[max_players];
-  planets = new Planet[max_planets];
+  planets = new Planet[num_planets];
   ignored = new int[max_players];
 
   for (uint8_t i = 0; i < max_players; i++)
@@ -33,27 +33,30 @@ void NESPtonBot::connect()
   act_conn = -1;
   while (true)
   {
-    act_conn = (act_conn+1)%conn_count;
-    if (WiFi.scanNetworks(false, false, 0, (uint8 *)ssid[act_conn]) == 0){
+    act_conn = (act_conn + 1) % conn_count;
+    if (WiFi.scanNetworks(false, false, 0, (uint8 *)ssid[act_conn]) == 0)
+    {
       Serial.printf("CONN: Network '%s' not reachable. Skipping...\n", ssid[act_conn]);
       continue;
     }
     Serial.printf("CONN: Connecting to NETWORK '%s'...", ssid[act_conn]);
     WiFi.begin(ssid[act_conn], pass[act_conn]);
     unsigned int start_time = millis();
-    while (WiFi.status() != WL_CONNECTED && millis()-start_time < conn_establish_timeout)
+    while (WiFi.status() != WL_CONNECTED && millis() - start_time < conn_establish_timeout)
       delay(50);
-    if (WiFi.status() != WL_CONNECTED){
-      Serial.printf("failed after %ds.\n", conn_establish_timeout/1000);
+    if (WiFi.status() != WL_CONNECTED)
+    {
+      Serial.printf("failed after %ds.\n", conn_establish_timeout / 1000);
       continue;
     }
 
     Serial.printf("done.\nCONN: Connecting to SERVER at %s:%d...", server[act_conn], port);
     start_time = millis();
-    while (!client.connect(server[act_conn], port) && millis()-start_time < conn_establish_timeout)
+    while (!client.connect(server[act_conn], port) && millis() - start_time < conn_establish_timeout)
       delay(50);
-    if (!client.connected()){
-      Serial.printf("failed after %ds.\n", conn_establish_timeout/1000);
+    if (!client.connected())
+    {
+      Serial.printf("failed after %ds.\n", conn_establish_timeout / 1000);
       continue;
     }
     Serial.println("connected.");
@@ -71,7 +74,7 @@ void NESPtonBot::connect()
     }
     else
     {
-      Serial.printf("CONN: No response received, attempting to reconnect in %ds.\n",reconnect_wait/1000);
+      Serial.printf("CONN: No response received, attempting to reconnect in %ds.\n", reconnect_wait / 1000);
       client.stop();
       WiFi.disconnect(false);
       delay(reconnect_wait);
@@ -142,7 +145,7 @@ void NESPtonBot::processRecv()
 
     // copy player info to array
     memcpy(&players[payload], &payload, sizeof(bool));
-    memcpy(&players[payload] + 2* sizeof(float), pos_buf, 2* sizeof(float));
+    memcpy(&players[payload] + 2 * sizeof(float), pos_buf, 2 * sizeof(float));
     break;
 
   case 4: // shot finished, DEPRECATED
@@ -154,7 +157,7 @@ void NESPtonBot::processRecv()
   case 5: // shot begin
     Serial.println("RECV: shot launched, discarding data.");
     // angle, velocity = self.connection.receive_struct("dd")
-    client.readBytes(pos_buf, 2*sizeof(double));
+    client.readBytes(pos_buf, 2 * sizeof(double));
     break;
 
   case 6: // shot end
@@ -201,10 +204,66 @@ void NESPtonBot::processRecv()
   }
 }
 
-double simShot(uint8_t target_id, double angle, double velocity){
-  
-}
+double NESPtonBot::simShot(uint8_t target_id, double angle, double velocity)
+{
+  Vec2d target_pos, self_pos, pos;
+  target_pos = players[target_id].position;
+  self_pos = players[id].position;
+  memcpy(&pos, &self_pos, sizeof(Vec2d));
 
+  double min_dist = sqrt((pos.x - target_pos.x) * (pos.x - target_pos.x) + (pos.y - target_pos.y) * (pos.y - target_pos.y));
+  bool left_source = true; // false;
+
+  Vec2d temp, speed;
+  speed.x = velocity * cos(angle);
+  speed.y = velocity * -sin(angle);
+
+  double l;
+  double multiplier;
+  for (unsigned int seg_i = 0; seg_i < max_segments; seg_i++)
+  {
+
+    for (byte planet_i = 0; planet_i < num_planets; planet_i++)
+    {
+      sub(&temp, &planets[planet_i].position, &pos);
+      l = norm(&temp);
+
+      if (l <= planets[planet_i].radius)
+      {
+        return min_dist;
+      }
+
+      multiplier = planets[planet_i].mass / (l * l * l * segment_steps);
+      mul(&temp, &temp, multiplier);
+      add(&speed, &speed, &temp);
+    }
+    div(&temp, &speed, segment_steps);
+    add(&pos, &pos, &temp);
+
+    sub(&temp, &target_pos, &pos);
+    l = norm(&temp);
+    min_dist = min(min_dist, l);
+    if ((l <= player_size) && left_source)
+    {
+      return 0;
+    }
+
+    /* cutting this check for performance boost
+    sub(&temp, &self_pos, &pos);
+    l = norm(&temp);
+    if (l > (player_size + 1.0))
+    {
+      left_source = true;
+    }
+    */
+
+    if ((pos.x < -margin) || (pos.x > battlefieldW + margin) || (pos.y < -margin) || (pos.y > battlefieldH + margin))
+    {
+      return min_dist;
+    }
+  }
+  return min_dist;
+}
 
 uint8_t getIgnoredIndex(int arr[], int id)
 {
