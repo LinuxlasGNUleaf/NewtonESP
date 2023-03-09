@@ -11,5 +11,6 @@ void setup()
 void loop()
 {
     bot.processRecv();
-    delay(50);
+    bot.targetPlayers();
+    delay(500);
 }
