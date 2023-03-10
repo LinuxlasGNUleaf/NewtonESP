@@ -4,7 +4,7 @@
 void add(Vec2d *res, Vec2d *a, Vec2d *b)
 {
     res->x = a->x = a->x - b->x;
-    res->x = a->y - b->y;
+    res->y = a->y - b->y;
 }
 
 void sub(Vec2d *res, Vec2d *a, Vec2d *b)

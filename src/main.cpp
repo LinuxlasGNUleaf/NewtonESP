@@ -10,6 +10,6 @@ void setup()
 
 void loop()
 {
-    bot.processRecv();
+    bot.processRecv(false);
     bot.targetPlayers();
 }
