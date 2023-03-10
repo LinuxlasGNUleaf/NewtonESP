@@ -4,13 +4,13 @@ NESPtonBot::NESPtonBot(/* args */)
 {
     id = -1;
     update_flag = false;
-    idle = false;
 
     players_index = 0;
     planets_index = 0;
 
     players = new Player[max_players];
     planets = new Planet[num_planets];
+    planet_mults = new double[num_planets];
     ignored = new int[max_players];
 
     for (uint8_t i = 0; i < max_players; i++)
@@ -64,21 +64,22 @@ void NESPtonBot::connect()
 
         // set name, dump recv buffer and enable buffer mode
         client.printf("n %s\n", name);
-        client.setTimeout(discard_timeout);
-        delay(50);
-        int bytes_available = client.peekAvailable();
-        if (bytes_available > 0)
+        start_time = millis();
+        while (client.peekAvailable() < discard_bytes && millis() < start_time + wait_timeout)
         {
-            Serial.printf("CONN: Response received, discarding %d bytes.\n", bytes_available);
+            delay(50);
+        }
+        if (client.peekAvailable() >= discard_bytes)
+        {
+            Serial.printf("CONN: Response received, discarding %d bytes.\n", discard_bytes);
             discardBytes(&client, client.peekAvailable());
             break;
         }
         else
         {
-            Serial.printf("CONN: No response received, attempting to reconnect in %ds.\n", reconnect_wait / 1000);
+            Serial.println("CONN: No response received, giving up.");
             client.stop();
             WiFi.disconnect(false);
-            delay(reconnect_wait);
         }
     }
     client.printf("b %d\n", version);
@@ -117,20 +118,24 @@ void NESPtonBot::processRecv()
     case 3: // player joined / moved
         uint8_t pos_buf[2 * sizeof(float)];
         client.readBytes(pos_buf, 2 * sizeof(float));
-        removeFromIgnored(ignored, payload);
+        float x, y;
+        memcpy(&x, pos_buf, sizeof(float));
+        memcpy(&y, pos_buf + sizeof(float), sizeof(float));
+
+        // copy player info to array
+        players[payload].position.x = x;
+        players[payload].position.y = y;
 
         if (!players[payload].active)
         {
             // player is not yet registered -> joined
-            Serial.printf("RECV: Player %d joined the game at (%d,%d)\n", payload,
-                          (int)round(pos_buf[0]), (int)round(pos_buf[sizeof(float)]));
+            Serial.printf("RECV: Player %d joined the game at (%4.0f,%4.0f)\n", payload, x, y);
             players[payload].active = true;
         }
         else
         {
             // player is already registered -> moved
-            Serial.printf("RECV: Player %d moved to (%d,%d)\n", payload, (int)round(pos_buf[0]),
-                          (int)round(pos_buf[sizeof(float)]));
+            Serial.printf("RECV: Player %d moved to (%4.0f,%4.0f)\n", payload, x, y);
 
             // was bot moved?
             if (payload == id)
@@ -144,10 +149,6 @@ void NESPtonBot::processRecv()
                 removeFromIgnored(ignored, payload);
             }
         }
-
-        // copy player info to array
-        memcpy(&players[payload], &payload, sizeof(bool));
-        memcpy(&players[payload] + 2 * sizeof(float), pos_buf, 2 * sizeof(float));
         break;
 
     case 4: // shot finished, DEPRECATED
@@ -164,7 +165,7 @@ void NESPtonBot::processRecv()
 
     case 6: // shot end
         Serial.println("RECV: shot ended, discarding data.");
-        discardBytes(&client, 4 * sizeof(double));
+        discardBytes(&client, 2 * sizeof(double));
         // receive number of segments & discard segments
         int n;
         recvInt(&client, &n);
@@ -196,6 +197,7 @@ void NESPtonBot::processRecv()
             client.readBytes(new_planet_buf, 4 * sizeof(double));
             memcpy(&new_planet, new_planet_buf, 4 * sizeof(double));
             planets[i] = new_planet;
+            planet_mults[i] = new_planet.mass / segment_steps;
         }
         Serial.printf("RECV: planet data for %d planets received\n", payload);
         break;
@@ -213,58 +215,60 @@ double NESPtonBot::simShot(uint8_t target_id, double angle, double power)
     self_pos = players[id].position;
     memcpy(&pos, &self_pos, sizeof(Vec2d));
 
-    double min_dist = sqrt((pos.x - target_pos.x) * (pos.x - target_pos.x) + (pos.y - target_pos.y) * (pos.y - target_pos.y));
-    bool left_source = true; // false;
+    double min_r2 = sqrt((pos.x - target_pos.x) * (pos.x - target_pos.x) + (pos.y - target_pos.y) * (pos.y - target_pos.y));
+    bool left_source = false;
 
     Vec2d temp, velocity;
     velocity.x = power * cos(angle);
     velocity.y = power * -sin(angle);
 
-    double l;
-    double multiplier;
+    double r2, mult;
     for (unsigned int seg_i = 0; seg_i < max_segments; seg_i++)
     {
-
+        if (seg_i % 100 == 0)
+            ESP.wdtFeed();
         for (byte planet_i = 0; planet_i < num_planets; planet_i++)
         {
             sub(&temp, &planets[planet_i].position, &pos);
-            l = norm(&temp);
-
-            if (l <= planets[planet_i].radius)
+            r2 = radius_sq(&temp);
+            if (r2 <= planets[planet_i].radius * planets[planet_i].radius)
             {
-                return min_dist;
+                Serial.print(")");
+                return min_r2;
             }
+            mult = Q_rsqrt(r2);
 
-            multiplier = planets[planet_i].mass / (l * l * l * segment_steps);
-            mul(&temp, &temp, multiplier);
+            mul(&temp, &temp, mult*mult*mult*planet_mults[planet_i]);
             add(&velocity, &velocity, &temp);
         }
-        div(&temp, &velocity, segment_steps);
+        //mul(&temp, &velocity, 1.0f/segment_steps);
+
         add(&pos, &pos, &temp);
 
         sub(&temp, &target_pos, &pos);
-        l = norm(&temp);
-        min_dist = min(min_dist, l);
-        if ((l <= player_size) && left_source)
+        r2 = radius_sq(&temp);
+        min_r2 = min(min_r2, r2);
+        if ((r2 <= player_size*player_size) && left_source)
         {
+            Serial.print('+');
             return 0;
         }
 
-        /* cutting this check for performance boost
         sub(&temp, &self_pos, &pos);
-        l = norm(&temp);
-        if (l > (player_size + 1.0))
+        r2 = temp.x*temp.x + temp.y*temp.y;
+        if (r2 > (player_size + 1.0)*(player_size + 1.0))
         {
-          left_source = true;
+            left_source = true;
         }
-        */
 
         if ((pos.x < -margin) || (pos.x > battlefieldW + margin) || (pos.y < -margin) || (pos.y > battlefieldH + margin))
         {
-            return min_dist;
+            Serial.print('o');
+            return min_r2;
         }
     }
-    return min_dist;
+    Serial.print('x');
+    return min_r2;
 }
 
 Vec2d NESPtonBot::scanFor(uint8_t target_id, bool *success)
@@ -284,8 +288,10 @@ Vec2d NESPtonBot::scanFor(uint8_t target_id, bool *success)
         double angle_inc = (2 * PI) / broad_steps;
         for (int ang_i = 0; ang_i < broad_steps; ang_i++)
         {
+            Serial.print('.');
             results[ang_i] = simShot(target_id, angle_inc * ang_i, power);
         }
+        Serial.println("done.");
 
         double best_angles[broad_test_candidates];
         int skip_after = -1;
@@ -384,45 +390,31 @@ bool NESPtonBot::checkForRelevantUpdate(uint8_t target_id)
 
 void NESPtonBot::targetPlayers()
 {
-    double min_dist = INFINITY;
+    double min_r2 = INFINITY;
     Vec2d temp;
+    double temp_dist;
     int target_id = -1;
-    for (int i = 0; i < max_players; i++)
+
+    for (uint8_t i = 0; i < max_players; i++)
     {
-        Serial.print(ignored[i]);
-    }
-    Serial.println();
-    for (int i = 0; i < max_players; i++)
-    {
-        if (id == i || players[i].active)
+        if (id == i || !players[i].active || isIgnored(ignored, i))
             continue;
-        if (isIgnored(ignored, i))
-        {
-            // Serial.printf("Player %d is on the ignored list.\n", i);
-            continue;
-        }
-        Serial.print('.');
+
         sub(&temp, &players[i].position, &players[id].position);
-        if (norm(&temp) < min_dist)
+        temp_dist = radius_sq(&temp);
+        if (temp_dist < min_r2)
         {
-            min_dist = norm(&temp);
+            min_r2 = temp_dist;
             target_id = i;
         }
     }
     if (target_id == -1)
-    {
-        if (idle)
-            return;
-        idle = true;
-        Serial.println("No viable opponents.");
         return;
-    }
-    idle = false;
     bool success;
-    Serial.printf("Starting scan for player %d.\n", target_id);
+    Serial.printf("scan for player %d.\n", target_id);
     Vec2d launch_params = scanFor(target_id, &success);
     if (!success)
         return;
-    client.printf("v %f\n%f\n", launch_params.x, launch_params.y);
+    client.printf("v %f\n%f\n", launch_params.x, degrees(launch_params.y));
     addToIgnored(ignored, target_id);
 }

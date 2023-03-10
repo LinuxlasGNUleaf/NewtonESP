@@ -12,5 +12,4 @@ void loop()
 {
     bot.processRecv();
     bot.targetPlayers();
-    delay(500);
 }

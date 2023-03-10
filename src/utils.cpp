@@ -12,7 +12,6 @@ int getIgnoredIndex(int *arr, int id)
 
 bool isIgnored(int *arr, int id)
 {
-  Serial.print(getIgnoredIndex(arr, id));
   return getIgnoredIndex(arr, id) != -1;
 }
 
@@ -60,4 +59,19 @@ void discardBytes(WiFiClient *client, unsigned int byte_count)
   {
     client->readBytes(&buf, 1);
   }
+}
+
+double Q_rsqrt(double y )
+{
+	uint64_t i;
+	double x2 = y * 0.5F;
+	const float threehalfs = 1.5F;
+
+	i  = * ( uint64_t * ) &y;                       // evil floating point bit level hacking
+	i  = 0x5FE6EB50C7B537A9 - ( i >> 1 );               // what the fuck? 
+	y  = * ( double * ) &i;
+	y  = y * ( threehalfs - ( x2 * y * y ) );   // 1st iteration
+//	y  = y * ( threehalfs - ( x2 * y * y ) );   // 2nd iteration, this can be removed
+
+	return y;
 }

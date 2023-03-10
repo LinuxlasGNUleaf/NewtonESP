@@ -7,6 +7,7 @@
 #include <utils.h>
 
 #include <ESP8266WiFi.h>
+#include <Esp.h>
 
 class NESPtonBot
 {
@@ -24,8 +25,8 @@ private:
     // arrays
     Player *players;
     Planet *planets;
+    double *planet_mults;
     int *ignored;
-    bool idle;
 
 public:
     NESPtonBot(/* args */);

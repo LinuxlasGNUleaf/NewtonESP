@@ -1,4 +1,5 @@
 #include <structs.h>
+#include <Arduino.h>
 
 void add(Vec2d *res, Vec2d *a, Vec2d *b)
 {
@@ -18,13 +19,6 @@ void mul(Vec2d *res, Vec2d *a, double b)
     res->y = a->y * b;
 }
 
-void div(Vec2d *res, Vec2d *a, double b)
-{
-    res->x = a->x / b;
-    res->y = a->y / b;
-}
-
-double norm(Vec2d *a)
-{
-    return sqrt((a->x) * (a->x) + (a->y) * (a->y));
+double radius_sq(Vec2d *a){
+    return (a->x)*(a->x) + (a->y)*(a->y);
 }
