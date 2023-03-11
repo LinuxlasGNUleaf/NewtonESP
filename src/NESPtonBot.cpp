@@ -297,109 +297,18 @@ void NESPtonBot::scanFor(uint8_t target_id, bool *success, Vec2d *launch_params)
     update_flag = false;
     *success = false;
 
-    double results[broad_steps];
-    double angle_inc = (2 * PI) / broad_steps;
-
-    // scan different power levels
-    double power = power_default;
-    for (int pow_i = 0; pow_i < power_count; pow_i++)
+    // calculate initial attack angle
+    Vec2d target_vec;
+    sub(&target_vec, &players[target_id].position, &players[id].position);
+    double direct_angle = angle(&target_vec);
+    double d_angle = 0;
+    while (d_angle < broad_scan_stop)
     {
-        power = power_default + power_changes[pow_i];
-
-        Serial.printf("Starting BROAD scan with pow=%2.0f...\n", power);
-        // broad scan of all angles
-        for (int ang_i = 0; ang_i < broad_steps; ang_i++)
-        {
-            results[ang_i] = simShot(target_id, angle_inc * ang_i, power);
-            Serial.printf("result: %4.0f\n", sqrt(results[ang_i]));
-            if (checkForRelevantUpdate(target_id))
-            {
-                Serial.println("RECV: Aborting scan because field changed.");
-                return;
-            }
-        }
-
-        Serial.print("done.\n[");
-        for (int ang_i = 0; ang_i < broad_steps; ang_i++)
-            Serial.print((String)sqrt(results[ang_i]) + " ");
-        Serial.println("]");
-
-        double best_angles[broad_test_candidates];
-        for (int candidate = 0; candidate < broad_test_candidates; candidate++)
-            best_angles[candidate] = -1;
-
-        int found_candidates = 0;
-        // repeat for each test candidate
-        for (int candidate = 0; candidate < broad_test_candidates; candidate++)
-        {
-            // find the lowest distance in array
-            double current_min = results[0];
-            int best_i = 0;
-            for (int res_i = 1; res_i < broad_steps; res_i++)
-            {
-                if (results[res_i] < current_min)
-                {
-                    current_min = results[res_i];
-                    best_i = res_i;
-                }
-            }
-            // if the lowest value is above broad_distance_max, abandon search
-            if (current_min > broad_distance_max*broad_distance_max)
-            {
-                Serial.println("No further angles that match minimal criteria at this power.");
-                break;
-            }
-            // save the best current angle to best_angles and "delete" it from the results array
-            Serial.printf("selecting angle %6.2f° for testing with dist: %5.2f\n", degrees(angle_inc * best_i), sqrt(results[best_i]));
-            best_angles[candidate] = angle_inc * best_i;
-            results[best_i] = INFINITY;
-            found_candidates++;
-        }
-        if (found_candidates == 0)
-        {
-            Serial.printf("Broad scan with pow=%2.0f yielded no results.\n", power);
-            continue;
-        }
-        else
-        {
-            Serial.printf("Broad scan with pow=%2.0f yielded %d viable angles.\n", power, found_candidates);
-            if (checkForRelevantUpdate(target_id))
-            {
-                Serial.println("Relevant update occured, aborting scan.\n");
-                return;
-            }
-        }
-        Serial.printf("Starting FINE scan with pow=%2.0f...\n", power);
-        for (int candidate = 0; candidate < found_candidates; candidate++)
-        {
-            // sweep test angle
-            double test_start_angle = best_angles[candidate] - angle_inc/2;
-            double test_angle_inc = angle_inc / fine_steps;
-            double angle, dist;
-            Serial.printf("testing angle=%3.2f°...\n", degrees(best_angles[candidate]));
-            for (int sweep_i = 0; sweep_i < fine_steps; sweep_i++)
-            {
-                angle = test_start_angle + test_angle_inc * sweep_i;
-                dist = simShot(target_id, angle, power);
-                Serial.printf("result: %4.0f\n", sqrt(dist));
-                if (dist == 0)
-                {
-                    Serial.printf("Found trajectory with these parameters: pow=%2.0f, angle=%5.2f°\n", power, degrees(angle));
-                    if (checkForRelevantUpdate(target_id))
-                    {
-                        Serial.println("Relevant update occured, aborting scan.\n");
-                        return;
-                    }
-                    launch_params->x = power;
-                    launch_params->y = angle;
-                    *success = true;
-                    return;
-                }
-            }
-        }
+        d_angle += broad_tangent_inc;
+        
     }
-    Serial.printf("Failed to find a trajectory for player %d, ignoring this player until update.\n", target_id);
-    addToIgnored(ignored, target_id);
+    
+
     return;
 }
 
@@ -457,6 +366,6 @@ void NESPtonBot::targetPlayers()
     scanFor(target_id, &success, &launch_params);
     if (!success)
         return;
-    client.printf("v %f\n%f\n", launch_params.x, degrees(launch_params.y + PI));
+    client.printf("v %2.1f\n%f\n", launch_params.x, degrees(launch_params.y));
     addToIgnored(ignored, target_id);
 }

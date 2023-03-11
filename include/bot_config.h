@@ -38,6 +38,9 @@ const byte power_count = 4;
 const double power_changes[power_count] = {0, 2, 4, 6};
 
 // broad scan settings
+const double broad_scan_stop = radians(90);
+const double broad_tangent_inc = radians(15);
+const double mid_threshold = 150;
 const int broad_steps = 40;
 const byte broad_test_candidates = 3;
 const double broad_distance_max = 150;

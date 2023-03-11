@@ -26,4 +26,12 @@ void sub(Vec2d *res, Vec2d *a, Vec2d *b);
 void mul(Vec2d *res, Vec2d *a, double b);
 double radius_sq(Vec2d *a);
 
+enum SCAN_MODE
+{
+   IDLE,
+   BROAD,
+   MID,
+   FINE
+};
+
 #endif
