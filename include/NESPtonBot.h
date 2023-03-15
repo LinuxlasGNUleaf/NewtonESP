@@ -33,7 +33,7 @@ public:
     void init();
     void connect();
     void processRecv(bool silent);
-    double simShot(uint8_t target_id, double angle, double power);
+    double simShot(uint8_t target_id, double power, double angle, bool approx);
     void scanFor(uint8_t target_id, bool *success, Vec2d *launch_params);
     bool checkForRelevantUpdate(uint8_t target_id);
     void targetPlayers();

@@ -24,7 +24,7 @@ double radius_sq(Vec2d *a)
     return (a->x) * (a->x) + (a->y) * (a->y);
 }
 
-double angle(Vec2d *a)
+double ang(Vec2d *a)
 {
-    return atan2(-a->y, a->x);
+    return atan2(-(a->y), a->x);
 }

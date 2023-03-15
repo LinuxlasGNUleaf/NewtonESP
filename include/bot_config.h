@@ -11,7 +11,7 @@ const int port = 3490;
 // secondary connection options
 const unsigned int discard_timeout = 1000;
 const unsigned int recv_timeout = 100;
-const unsigned int conn_establish_timeout = 5000;
+const unsigned int conn_establish_timeout = 6000;
 const unsigned int discard_bytes = 178;
 const unsigned int wait_timeout = 6000;
 const uint8_t version = 9;
@@ -32,18 +32,17 @@ const int margin = 500;
 const unsigned int max_segments = 2000;
 const unsigned int segment_steps = 25;
 
-// SCAN OPTIONS
-const double power_default = 12;
-const byte power_count = 4;
-const double power_changes[power_count] = {0, 2, 4, 6};
 
-// broad scan settings
-const double broad_scan_stop = radians(90);
-const double broad_tangent_inc = radians(15);
-const double mid_threshold = 150;
-const int broad_steps = 40;
-const byte broad_test_candidates = 3;
-const double broad_distance_max = 150;
+// scan settings
+const double min_power = 14;
+const double max_power = 18;
+const double newton_stop_angle = radians(0.01);
+const double approx_threshhold = 50;
+const double d_angle_divisor = 4;
+const int max_iterations = 20;
+
+const double corrector_in_abs_max = 700;
+const double correction_threshold = 150;
 
 // fine scan settings
 const int fine_steps = 40;

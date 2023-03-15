@@ -36,7 +36,7 @@ void NESPtonBot::connect()
             ;
     }
 
-    act_conn = -1;
+    act_conn = conn_count;
     while (true)
     {
         act_conn = (act_conn + 1) % conn_count;
@@ -222,7 +222,7 @@ void NESPtonBot::processRecv(bool silent)
     }
 }
 
-double NESPtonBot::simShot(uint8_t target_id, double angle, double power)
+double NESPtonBot::simShot(uint8_t target_id, double power, double angle, bool approx)
 {
     Vec2d target_pos, self_pos, pos;
     // copy target position from players array
@@ -238,7 +238,7 @@ double NESPtonBot::simShot(uint8_t target_id, double angle, double power)
 
     Vec2d temp;
     double min_r2 = (pos.x - target_pos.x) * (pos.x - target_pos.x) + (pos.y - target_pos.y) * (pos.y - target_pos.y);
-    Serial.printf("angle: %3.0f°, ", degrees(angle));
+    Serial.printf("angle: %4.0f°, ", degrees(angle));
     bool left_source = false;
 
     double r2, mult;
@@ -255,10 +255,13 @@ double NESPtonBot::simShot(uint8_t target_id, double angle, double power)
             r2 = radius_sq(&temp);
             if (r2 <= planets[planet_i].radius * planets[planet_i].radius)
             {
-                Serial.print("[ ) ], ");
+                Serial.printf("[ ) ], dist: [%6.1f] [%d]\n", sqrt(min_r2), approx);
                 return min_r2;
             }
-            mult = Q_rsqrt(r2);
+            if (approx)
+                mult = Q_rsqrt(r2);
+            else
+                mult = 1 / sqrt(r2);
 
             mul(&temp, &temp, mult * mult * mult * planet_mults[planet_i]);
             add(&velocity, &velocity, &temp);
@@ -271,7 +274,7 @@ double NESPtonBot::simShot(uint8_t target_id, double angle, double power)
         min_r2 = min(min_r2, r2);
         if ((r2 <= player_size * player_size) && left_source)
         {
-            Serial.print("[ + ], ");
+            Serial.printf("[ X ], dist: [%6.1f] [%d]\n", 0.0f, approx);
             return 0;
         }
 
@@ -284,11 +287,11 @@ double NESPtonBot::simShot(uint8_t target_id, double angle, double power)
 
         if ((pos.x < -margin) || (pos.x > battlefieldW + margin) || (pos.y < -margin) || (pos.y > battlefieldH + margin))
         {
-            Serial.print("[ O ], ");
+            Serial.printf("[ O ], dist: [%6.1f] [%d]\n", sqrt(min_r2), approx);
             return min_r2;
         }
     }
-    Serial.print("[ . ], ");
+    Serial.printf("[ . ], dist: [%6.1f] [%d]\n", sqrt(min_r2), approx);
     return min_r2;
 }
 
@@ -300,20 +303,76 @@ void NESPtonBot::scanFor(uint8_t target_id, bool *success, Vec2d *launch_params)
     // calculate initial attack angle
     Vec2d target_vec;
     sub(&target_vec, &players[target_id].position, &players[id].position);
-    double direct_angle = angle(&target_vec);
-    double d_angle = 0;
-    while (d_angle < broad_scan_stop)
-    {
-        d_angle += broad_tangent_inc;
-        
-    }
-    
 
-    return;
+    double angle, max_angle, min_angle, distance_h, distance_l, d_angle, last_distance_h, last_distance_l;
+
+    angle = ang(&target_vec);
+    last_distance_h = sqrt(radius_sq(&target_vec));
+    last_distance_l = last_distance_h;
+    for (launch_params->x = min_power; launch_params->x <= max_power; launch_params->x++)
+    {
+        Serial.printf("Iterating for power=%4.1f\n", launch_params->x);
+        angle = ang(&target_vec);
+        max_angle = angle + PI;
+        min_angle = angle - PI;
+        d_angle = PI / d_angle_divisor;
+        distance_h = last_distance_h;
+        distance_l = last_distance_l;
+        for (int i = 0; i < max_iterations && !checkForRelevantUpdate(target_id); i++)
+        {
+            d_angle = (max_angle - min_angle) / (d_angle_divisor * 2);
+            angle = (max_angle + min_angle) * 0.5f;
+
+
+            // shot high
+            Serial.printf("[%d] [%6.1f, %6.1f] ", i, degrees(min_angle), degrees(max_angle));
+            distance_h = simShot(target_id, launch_params->x, angle + d_angle, last_distance_h > approx_threshhold);
+            // if this is the first shot that crosses the "no-approximations" threshold, redo the calculations
+            if (distance_h <= approx_threshhold && last_distance_h > approx_threshhold)
+                distance_h = simShot(target_id, launch_params->x, angle + d_angle, false);
+
+            // shot low
+            Serial.printf("[%d] [%6.1f, %6.1f] ", i, degrees(min_angle), degrees(max_angle));
+            distance_l = simShot(target_id, launch_params->x, angle - d_angle, last_distance_l > approx_threshhold);
+            // if this is the first shot that crosses the "no-approximations" threshold, redo the calculations
+            if (distance_l <= approx_threshhold && last_distance_l > approx_threshhold)
+                distance_l = simShot(target_id, launch_params->x, angle - d_angle, false);
+
+            if (distance_h == 0 || distance_l == 0)
+                break;
+
+            if (distance_h > distance_l)
+            {
+                // we were too high
+                max_angle = angle;
+            }
+            else
+            {
+                // we were too low
+                min_angle = angle;
+            }
+            last_distance_h = distance_h;
+            last_distance_l = distance_l;
+        }
+
+        if (distance_h == 0)
+        {
+            *success = true;
+            launch_params->y = angle + d_angle;
+            return;
+        }
+        if (distance_l == 0)
+        {
+            *success = true;
+            launch_params->y = angle - d_angle;
+            return;
+        }
+    }
 }
 
 bool NESPtonBot::checkForRelevantUpdate(uint8_t target_id)
 {
+    bool ret = false;
     Vec2d old_target, old_self;
     memcpy(&old_target, &players[target_id].position, sizeof(Vec2d));
     memcpy(&old_self, &players[id].position, sizeof(Vec2d));
@@ -323,17 +382,19 @@ bool NESPtonBot::checkForRelevantUpdate(uint8_t target_id)
 
     // field changed or player inactive
     if (update_flag || !players[target_id].active)
-        return true;
+        ret = true;
 
     // target changed position
     if (players[target_id].position.x != old_target.x || players[target_id].position.y != old_target.y)
-        return true;
+        ret = true;
 
     // bot changed position
     if (players[id].position.x != old_self.x || players[id].position.y != old_self.y)
-        return true;
+        ret = true;
 
-    return false;
+    if (ret)
+        Serial.println("Aborting scan due to relevant field change.");
+    return ret;
 }
 
 void NESPtonBot::targetPlayers()
