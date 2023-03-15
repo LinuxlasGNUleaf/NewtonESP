@@ -322,21 +322,27 @@ void NESPtonBot::scanFor(uint8_t target_id, bool *success, Vec2d *launch_params)
         {
             d_angle = (max_angle - min_angle) / (d_angle_divisor * 2);
             angle = (max_angle + min_angle) * 0.5f;
-
+            
 
             // shot high
-            Serial.printf("[%d] [%6.1f, %6.1f] ", i, degrees(min_angle), degrees(max_angle));
-            distance_h = simShot(target_id, launch_params->x, angle + d_angle, last_distance_h > approx_threshhold);
+            Serial.printf("[%2d] [%6.1f, %6.1f] ", i, degrees(min_angle), degrees(max_angle));
+            distance_h = simShot(target_id, launch_params->x, angle + d_angle, last_distance_h > approx_distance_r2_threshold);
             // if this is the first shot that crosses the "no-approximations" threshold, redo the calculations
-            if (distance_h <= approx_threshhold && last_distance_h > approx_threshhold)
+            if (distance_h <= approx_distance_r2_threshold && last_distance_h > approx_distance_r2_threshold)
+            {
+                Serial.printf("[%2d] [%6.1f, %6.1f] ", i, degrees(min_angle), degrees(max_angle));
                 distance_h = simShot(target_id, launch_params->x, angle + d_angle, false);
+            }
 
             // shot low
-            Serial.printf("[%d] [%6.1f, %6.1f] ", i, degrees(min_angle), degrees(max_angle));
-            distance_l = simShot(target_id, launch_params->x, angle - d_angle, last_distance_l > approx_threshhold);
+            Serial.printf("[%2d] [%6.1f, %6.1f] ", i, degrees(min_angle), degrees(max_angle));
+            distance_l = simShot(target_id, launch_params->x, angle - d_angle, true);
             // if this is the first shot that crosses the "no-approximations" threshold, redo the calculations
-            if (distance_l <= approx_threshhold && last_distance_l > approx_threshhold)
+            if (distance_l <= approx_distance_r2_threshold  && last_distance_l > approx_threshhold)
+            {
+                Serial.printf("[%2d] [%6.1f, %6.1f] ", i, degrees(min_angle), degrees(max_angle));
                 distance_l = simShot(target_id, launch_params->x, angle - d_angle, false);
+            }
 
             if (distance_h == 0 || distance_l == 0)
                 break;
@@ -353,6 +359,11 @@ void NESPtonBot::scanFor(uint8_t target_id, bool *success, Vec2d *launch_params)
             }
             last_distance_h = distance_h;
             last_distance_l = distance_l;
+        }
+
+        if (checkForRelevantUpdate(target_id)){
+            Serial.println("Aborting scan due to field change.");
+            return;
         }
 
         if (distance_h == 0)
