@@ -28,14 +28,17 @@ private:
     double *planet_mults;
     int *ignored;
 
+    // scan attributes
+    uint8_t target_id;
+
 public:
     NESPtonBot(/* args */);
     void init();
     void connect();
-    void processRecv(bool silent);
-    double simShot(uint8_t target_id, double power, double angle, bool approx);
-    void scanFor(uint8_t target_id, bool *success, Vec2d *launch_params);
-    bool checkForRelevantUpdate(uint8_t target_id);
+    void processRecv();
+    double simShot(double power, double angle, bool approx);
+    void scanFor(bool *success, Vec2d *launch_params);
+    bool checkForAbortCondition();
     void targetPlayers();
 };
 

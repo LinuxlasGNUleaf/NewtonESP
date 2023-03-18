@@ -34,16 +34,14 @@ const unsigned int segment_steps = 25;
 
 
 // scan settings
-const double min_power = 14;
-const double max_power = 18;
-const double newton_stop_angle = radians(0.01);
-const double d_angle_divisor = 4;
-const int max_iterations = 20;
+const double min_power = 13;
+const double power_inc = 1.5;
+const double max_power = 19;
+const double d_angle_divisor = 1.1;
+const int max_iterations = 12;
 
-const double corrector_in_abs_max = 700;
-const double correction_threshold = 150;
-
-const double approx_distance_r2_threshold = 20*20;
+const double approx_target_threshold = 30*30;
+const double r2_abort_mult = 1.5;
 
 // fine scan settings
 const int fine_steps = 40;

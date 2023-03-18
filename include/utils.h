@@ -13,6 +13,4 @@ void removeFromIgnored(int arr[], int id);
 void recvInt(WiFiClient *client, int *target);
 void discardBytes(WiFiClient *client, unsigned int byte_count);
 double Q_rsqrt(double number);
-double angle(Vec2d *a);
-
 #endif

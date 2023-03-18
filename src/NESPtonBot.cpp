@@ -2,7 +2,7 @@
 
 NESPtonBot::NESPtonBot(/* args */)
 {
-    id = -1;
+    id = 255;
     update_flag = false;
 
     players_index = 0;
@@ -18,6 +18,8 @@ NESPtonBot::NESPtonBot(/* args */)
         ignored[i] = -1;
         players[i].active = false;
     }
+
+    target_id = 255;
 }
 
 void NESPtonBot::init()
@@ -92,7 +94,7 @@ void NESPtonBot::connect()
     Serial.println();
 }
 
-void NESPtonBot::processRecv(bool silent)
+void NESPtonBot::processRecv()
 {
     // receive msg_id and payload
     client.setTimeout(recv_timeout);
@@ -110,16 +112,14 @@ void NESPtonBot::processRecv(bool silent)
     case 1: // bot join
         id = payload;
         update_flag = true;
-        if (!silent)
-            Serial.printf("RECV: Own ID (%d) received.\n", id);
+        Serial.printf("RECV: Own ID (%d) received.\n", id);
         break;
 
     case 2: // player leave
         // mark player inactive
         players[payload].active = false;
         removeFromIgnored(ignored, payload);
-        if (!silent)
-            Serial.printf("RECV: Player %d left the game.\n", payload);
+        Serial.printf("RECV: Player %d left the game.\n", payload);
         break;
 
     case 3: // player joined / moved
@@ -136,15 +136,13 @@ void NESPtonBot::processRecv(bool silent)
         if (!players[payload].active)
         {
             // player is not yet registered -> joined
-            if (!silent)
-                Serial.printf("RECV: Player %d joined the game at (%4.0f,%4.0f)\n", payload, x, y);
+            Serial.printf("RECV: Player %d joined the game at (%4.0f,%4.0f)\n", payload, x, y);
             players[payload].active = true;
         }
         else
         {
             // player is already registered -> moved
-            if (!silent)
-                Serial.printf("RECV: Player %d moved to (%4.0f,%4.0f)\n", payload, x, y);
+            Serial.printf("RECV: Player %d moved to (%4.0f,%4.0f)\n", payload, x, y);
 
             // was bot moved?
             if (payload == id)
@@ -167,15 +165,13 @@ void NESPtonBot::processRecv(bool silent)
         break;
 
     case 5: // shot begin
-        if (!silent)
-            Serial.println("RECV: shot launched, discarding data.");
+        // Serial.println("RECV: shot launched, discarding data.");
         // angle, power = self.connection.receive_struct("dd")
         client.readBytes(pos_buf, 2 * sizeof(double));
         break;
 
     case 6: // shot end
-        if (!silent)
-            Serial.println("RECV: shot ended, discarding data.");
+        // Serial.println("RECV: shot ended, discarding data.");
         discardBytes(&client, 2 * sizeof(double));
         // receive number of segments & discard segments
         int n;
@@ -184,8 +180,7 @@ void NESPtonBot::processRecv(bool silent)
         break;
 
     case 7: // game mode, deprecated
-        if (!silent)
-            Serial.println("RECV: wrong bot protocol, this msg_type (7) should not be received!");
+        Serial.println("RECV: wrong bot protocol, this msg_type (7) should not be received!");
         while (1)
             ;
         break;
@@ -194,8 +189,7 @@ void NESPtonBot::processRecv(bool silent)
         uint8_t energy_buf[sizeof(double)];
         client.readBytes(energy_buf, sizeof(double));
         memcpy(&energy, energy_buf, sizeof(double));
-        if (!silent)
-            Serial.printf("RECV: own energy updated to %f.\n", energy);
+        Serial.printf("RECV: own energy updated to %f.\n", energy);
         break;
 
     case 9: // planet info
@@ -212,8 +206,7 @@ void NESPtonBot::processRecv(bool silent)
             planets[i] = new_planet;
             planet_mults[i] = new_planet.mass / segment_steps;
         }
-        if (!silent)
-            Serial.printf("RECV: planet data for %d planets received\n", payload);
+        Serial.printf("RECV: planet data for %d planets received\n", payload);
         break;
 
     default:
@@ -222,7 +215,7 @@ void NESPtonBot::processRecv(bool silent)
     }
 }
 
-double NESPtonBot::simShot(uint8_t target_id, double power, double angle, bool approx)
+double NESPtonBot::simShot(double power, double angle, bool approx)
 {
     Vec2d target_pos, self_pos, pos;
     // copy target position from players array
@@ -276,6 +269,9 @@ double NESPtonBot::simShot(uint8_t target_id, double power, double angle, bool a
         {
             Serial.printf("[ X ], dist: [%6.1f] [%d]\n", 0.0f, approx);
             return 0;
+        } else if (r2 > r2_abort_mult*min_r2) {
+            Serial.printf("[ %% ], dist: [%6.1f] [%d]\n", sqrt(min_r2), approx);
+            return min_r2;
         }
 
         sub(&temp, &self_pos, &pos);
@@ -295,7 +291,7 @@ double NESPtonBot::simShot(uint8_t target_id, double power, double angle, bool a
     return min_r2;
 }
 
-void NESPtonBot::scanFor(uint8_t target_id, bool *success, Vec2d *launch_params)
+void NESPtonBot::scanFor(bool *success, Vec2d *launch_params)
 {
     update_flag = false;
     *success = false;
@@ -303,13 +299,14 @@ void NESPtonBot::scanFor(uint8_t target_id, bool *success, Vec2d *launch_params)
     // calculate initial attack angle
     Vec2d target_vec;
     sub(&target_vec, &players[target_id].position, &players[id].position);
-
+    Serial.printf("INITIAL DISTANCE: %5.1f\n", sqrt(radius_sq(&target_vec)));
     double angle, max_angle, min_angle, distance_h, distance_l, d_angle, last_distance_h, last_distance_l;
+    bool approx;
 
     angle = ang(&target_vec);
     last_distance_h = sqrt(radius_sq(&target_vec));
     last_distance_l = last_distance_h;
-    for (launch_params->x = min_power; launch_params->x <= max_power; launch_params->x++)
+    for (launch_params->x = min_power; launch_params->x <= max_power; launch_params->x += power_inc)
     {
         Serial.printf("Iterating for power=%4.1f\n", launch_params->x);
         angle = ang(&target_vec);
@@ -318,34 +315,39 @@ void NESPtonBot::scanFor(uint8_t target_id, bool *success, Vec2d *launch_params)
         d_angle = PI / d_angle_divisor;
         distance_h = last_distance_h;
         distance_l = last_distance_l;
-        for (int i = 0; i < max_iterations && !checkForRelevantUpdate(target_id); i++)
+        approx = true;
+
+        for (int i = 0; i < max_iterations && !checkForAbortCondition(); i++)
         {
             d_angle = (max_angle - min_angle) / (d_angle_divisor * 2);
             angle = (max_angle + min_angle) * 0.5f;
-            
 
-            // shot high
+            // high shot
             Serial.printf("[%2d] [%6.1f, %6.1f] ", i, degrees(min_angle), degrees(max_angle));
-            distance_h = simShot(target_id, launch_params->x, angle + d_angle, last_distance_h > approx_distance_r2_threshold);
+            distance_h = simShot(launch_params->x, angle + d_angle, approx);
             // if this is the first shot that crosses the "no-approximations" threshold, redo the calculations
-            if (distance_h <= approx_distance_r2_threshold && last_distance_h > approx_distance_r2_threshold)
+            if (distance_h <= approx_target_threshold && approx)
             {
+                Serial.println("Recalculating without approximations...");
                 Serial.printf("[%2d] [%6.1f, %6.1f] ", i, degrees(min_angle), degrees(max_angle));
-                distance_h = simShot(target_id, launch_params->x, angle + d_angle, false);
+                distance_h = simShot(launch_params->x, angle + d_angle, false);
+                approx = false;
+                i = 0;
             }
 
-            // shot low
+            // low shot
             Serial.printf("[%2d] [%6.1f, %6.1f] ", i, degrees(min_angle), degrees(max_angle));
-            distance_l = simShot(target_id, launch_params->x, angle - d_angle, true);
+            distance_l = simShot(launch_params->x, angle - d_angle, approx);
             // if this is the first shot that crosses the "no-approximations" threshold, redo the calculations
-            if (distance_l <= approx_distance_r2_threshold  && last_distance_l > approx_threshhold)
+            if (distance_l <= approx_target_threshold && approx)
             {
+                Serial.println("Recalculating without approximations...");
                 Serial.printf("[%2d] [%6.1f, %6.1f] ", i, degrees(min_angle), degrees(max_angle));
-                distance_l = simShot(target_id, launch_params->x, angle - d_angle, false);
+                distance_l = simShot(launch_params->x, angle - d_angle, false);
+                approx = false;
+                i = 0;
             }
 
-            if (distance_h == 0 || distance_l == 0)
-                break;
 
             if (distance_h > distance_l)
             {
@@ -357,55 +359,63 @@ void NESPtonBot::scanFor(uint8_t target_id, bool *success, Vec2d *launch_params)
                 // we were too low
                 min_angle = angle;
             }
+
             last_distance_h = distance_h;
             last_distance_l = distance_l;
-        }
 
-        if (checkForRelevantUpdate(target_id)){
-            Serial.println("Aborting scan due to field change.");
-            return;
-        }
+            if (checkForAbortCondition())
+                return;
 
-        if (distance_h == 0)
-        {
-            *success = true;
-            launch_params->y = angle + d_angle;
-            return;
+            if (approx)
+                continue;
+
+            if (distance_h == 0)
+            {
+                *success = true;
+                launch_params->y = angle + d_angle;
+                return;
+            }
+
+            if (distance_l == 0)
+            {
+                *success = true;
+                launch_params->y = angle - d_angle;
+                return;
+            }
         }
-        if (distance_l == 0)
-        {
-            *success = true;
-            launch_params->y = angle - d_angle;
-            return;
-        }
+        Serial.println("No trajectory found for this power.");
     }
+    Serial.println("No trajectory found, abandoning this target.");
 }
 
-bool NESPtonBot::checkForRelevantUpdate(uint8_t target_id)
+bool NESPtonBot::checkForAbortCondition()
 {
-    bool ret = false;
     Vec2d old_target, old_self;
     memcpy(&old_target, &players[target_id].position, sizeof(Vec2d));
     memcpy(&old_self, &players[id].position, sizeof(Vec2d));
 
     while (client.peekAvailable() != 0)
-        processRecv(true);
+        processRecv();
 
     // field changed or player inactive
-    if (update_flag || !players[target_id].active)
-        ret = true;
+    if (update_flag){
+        Serial.println("Aborting scan due to field change.");
+        return true;
+    }
 
     // target changed position
-    if (players[target_id].position.x != old_target.x || players[target_id].position.y != old_target.y)
-        ret = true;
+    if (!(players[target_id].active && players[target_id].position.x == old_target.x && players[target_id].position.y == old_target.y)){
+        Serial.println("Aborting scan due to opponent state change.");
+        return true;
+    }
+
 
     // bot changed position
-    if (players[id].position.x != old_self.x || players[id].position.y != old_self.y)
-        ret = true;
-
-    if (ret)
-        Serial.println("Aborting scan due to relevant field change.");
-    return ret;
+    if (!(players[id].position.x == old_self.x && players[id].position.y == old_self.y)){
+        Serial.println("Aborting scan due to own position change.");
+        return true;
+    }
+    return false;
 }
 
 void NESPtonBot::targetPlayers()
@@ -413,8 +423,8 @@ void NESPtonBot::targetPlayers()
     double min_r2 = INFINITY;
     Vec2d temp;
     double temp_dist;
-    int target_id = -1;
 
+    target_id = 255;
     for (uint8_t i = 0; i < max_players; i++)
     {
         if (id == i || !players[i].active || isIgnored(ignored, i))
@@ -428,16 +438,17 @@ void NESPtonBot::targetPlayers()
             target_id = i;
         }
     }
-    if (target_id == -1)
+    if (target_id == 255)
         return;
     bool success;
-    Serial.printf("scan for player %d.\n", target_id);
+    Serial.printf("begin scan for player %d\n", target_id);
     Vec2d launch_params;
     launch_params.x = 0;
     launch_params.y = 0;
-    scanFor(target_id, &success, &launch_params);
+    scanFor(&success, &launch_params);
     if (!success)
         return;
     client.printf("v %2.1f\n%f\n", launch_params.x, degrees(launch_params.y));
+    client.flush();
     addToIgnored(ignored, target_id);
 }
