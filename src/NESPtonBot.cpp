@@ -317,8 +317,12 @@ void NESPtonBot::scanFor(bool *success, Vec2d *launch_params)
         distance_l = last_distance_l;
         approx = true;
 
-        for (int i = 0; i < max_iterations && !checkForAbortCondition(); i++)
+        for (int i = 0; i < max_iterations; i++)
         {
+            // check for field change that would make simulation invalid
+            if (checkForAbortCondition())
+                return;
+
             d_angle = (max_angle - min_angle) / (d_angle_divisor * 2);
             angle = (max_angle + min_angle) * 0.5f;
 
