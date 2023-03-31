@@ -18,6 +18,9 @@ private:
     uint8_t id;
     double energy;
     bool update_flag;
+
+    uint8_t num_planets;
+
     // indices
     uint8_t players_index;
     uint8_t planets_index;
@@ -37,10 +40,10 @@ public:
     void connect();
     void processRecv();
     double simShot(double power, double angle, bool approx);
-    void scanFor(bool *success, Vec2d *launch_params);
+    void scanFor(int *state, Vec2d *launch_params);
     bool checkForAbortCondition();
     void targetPlayers();
-    void iterate(double *power, Vec2d *power_limits, double *angle, Vec2d *angle_limits, Vec2d *distances, bool *approx, int *i, int *state, bool mode);
+    void iterate(double *power, Vec2d *power_limits, double *angle, Vec2d *angle_limits, Vec2d *distances, bool *approx, int *i, int *state);
 };
 
 #endif

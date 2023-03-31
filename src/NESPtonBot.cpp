@@ -9,8 +9,8 @@ NESPtonBot::NESPtonBot(/* args */)
     planets_index = 0;
 
     players = new Player[max_players];
-    planets = new Planet[num_planets];
-    planet_mults = new double[num_planets];
+    planets = new Planet[max_planets];
+    planet_mults = new double[max_planets];
     ignored = new int[max_players];
 
     for (uint8_t i = 0; i < max_players; i++)
@@ -194,11 +194,13 @@ void NESPtonBot::processRecv()
 
     case 9: // planet info
         update_flag = true;
+        num_planets = payload;
+
         int byte_count;
         recvInt(&client, &byte_count);
 
         Planet new_planet;
-        uint8_t new_planet_buf[4 * sizeof(double)];
+        uint8_t new_planet_buf[sizeof(Planet)];
         for (int i = 0; i < payload; i++)
         {
             client.readBytes(new_planet_buf, 4 * sizeof(double));
@@ -231,7 +233,6 @@ double NESPtonBot::simShot(double power, double angle, bool approx)
 
     Vec2d temp;
     double min_r2 = (pos.x - target_pos.x) * (pos.x - target_pos.x) + (pos.y - target_pos.y) * (pos.y - target_pos.y);
-    // Serial.printf("angle: %4.0f°, ", degrees(angle));
     bool left_source = false;
 
     double r2, mult;
@@ -248,7 +249,6 @@ double NESPtonBot::simShot(double power, double angle, bool approx)
             r2 = radius_sq(&temp);
             if (r2 <= planets[planet_i].radius * planets[planet_i].radius)
             {
-                // Serial.printf("[ ) ], dist: [%6.1f] [%d]\n", sqrt(min_r2), approx);
                 return min_r2;
             }
             if (approx)
@@ -267,12 +267,10 @@ double NESPtonBot::simShot(double power, double angle, bool approx)
         min_r2 = min(min_r2, r2);
         if ((r2 <= player_size * player_size) && left_source)
         {
-            // Serial.printf("[ X ], dist: [%6.1f] [%d]\n", 0.0f, approx);
             return 0;
         }
         else if (r2 > r2_abort_mult * min_r2)
         {
-            // Serial.printf("[ %% ], dist: [%6.1f] [%d]\n", sqrt(min_r2), approx);
             return min_r2;
         }
 
@@ -285,28 +283,27 @@ double NESPtonBot::simShot(double power, double angle, bool approx)
 
         if ((pos.x < -margin) || (pos.x > battlefieldW + margin) || (pos.y < -margin) || (pos.y > battlefieldH + margin))
         {
-            // Serial.printf("[ O ], dist: [%6.1f] [%d]\n", sqrt(min_r2), approx);
             return min_r2;
         }
     }
-    // Serial.printf("[ . ], dist: [%6.1f] [%d]\n", sqrt(min_r2), approx);
     return min_r2;
 }
 
-void NESPtonBot::scanFor(bool *success, Vec2d *launch_params)
+void NESPtonBot::scanFor(int *state, Vec2d *launch_params)
 {
     update_flag = false;
-    *success = false;
+    *state = 0;
 
     // distance vector
     Vec2d distances;
 
     // calculate initial attack angle
     Vec2d target_vec;
-    double start_angle;
+    double start_angle, start_dist;
     sub(&target_vec, &players[target_id].position, &players[id].position);
     start_angle = ang(&target_vec);
-    Serial.printf("INITIAL DISTANCE: %5.1f\n", sqrt(radius_sq(&target_vec)));
+    start_dist = sqrt(radius_sq(&target_vec));
+    Serial.printf("INITIAL DISTANCE: %5.1f\n", start_dist);
 
     // variable parameters
     double angle, power;
@@ -316,77 +313,70 @@ void NESPtonBot::scanFor(bool *success, Vec2d *launch_params)
     Vec2d power_limits;
 
     bool approx = true;
-    int state = 0;
+    unsigned long start_ts;
 
-    for (power = min_power; power <= max_power; power += power_inc)
+    for (power = map(constrain(start_dist, 100, battlefieldD*0.75), 0, battlefieldD*0.75, 0, (max_power-min_power) * 0.75) + min_power; power <= max_power; power += power_inc)
     {
         Serial.printf("Iterating for power=%4.1f\n", power);
-        approx = true;
 
+        // prevent the game from kicking us
+        client.write("u\n");
+        client.flush();
+
+        approx = true;
         angle = start_angle;
-        angle_limits.x = angle + PI;
-        angle_limits.y = angle - PI;
+        angle_limits.x = angle + PI / 2;
+        angle_limits.y = angle - PI / 2;
         power_limits.x = min_power;
         power_limits.y = max_power;
+
         for (int i = 0; i < max_iterations; i++)
         {
-            iterate(&power, &power_limits, &angle, &angle_limits, &distances, &approx, &i, &state, ITERATE_ANGLES);
-            Serial.printf("Distance H/L: [%6.2f] [%6.2f]\n", sqrt(distances.x), sqrt(distances.y));
-            if (state != 0)
+            start_ts = millis();
+            iterate(&power, &power_limits, &angle, &angle_limits, &distances, &approx, &i, state);
+            Serial.printf("Distance H/L: [%d] [%6.2f] [%6.2f] (%4lums)\n", *state, sqrt(distances.x), sqrt(distances.y), millis() - start_ts);
+            if (*state != 0)
                 break;
         }
-        if (state == 1)
+        if (*state == -2)
+            return;
+        if (*state == 1)
         {
+            Serial.println("\\\\======> TRAJECTORY FOUND");
             launch_params->x = power;
             launch_params->y = angle;
-            *success = true;
             return;
         }
         Serial.println("No trajectory found for this power.");
     }
     Serial.println("No trajectory found, abandoning this target.");
+    *state = -1;
 }
 
-void NESPtonBot::iterate(double *power, Vec2d *power_limits, double *angle, Vec2d *angle_limits, Vec2d *distances, bool *approx, int *i, int *state, bool mode)
+void NESPtonBot::iterate(double *power, Vec2d *power_limits, double *angle, Vec2d *angle_limits, Vec2d *distances, bool *approx, int *i, int *state)
 {
     // check for field change that would make simulation invalid
     if (checkForAbortCondition())
     {
-        *state = -1;
+        *state = -2;
         return;
     }
 
     // calculate the delta and mean according to mode and limits for that mode
     double delta;
-    if (mode == ITERATE_ANGLES)
-    {
-        delta = (angle_limits->y - angle_limits->x) * delta_divisor;
-        *angle = (angle_limits->y + angle_limits->x) * 0.5f;
-    }
-    else
-    {
-        delta = (power_limits->y - power_limits->x) * delta_divisor;
-        *power = (power_limits->y + power_limits->x) * 0.5f;
-    }
+    delta = (angle_limits->y - angle_limits->x) * delta_divisor;
+    *angle = (angle_limits->y + angle_limits->x) * 0.5f;
 
     // simulate shot according to mode
-    if (mode == ITERATE_ANGLES)
-    {
-        distances->x = simShot(*power, *angle - delta, approx);
-        distances->y = simShot(*power, *angle + delta, approx);
-    }
-    else
-    {
-        distances->x = simShot(*power - delta, *angle, approx);
-        distances->y = simShot(*power + delta, *angle, approx);
-    }
+    distances->x = simShot(*power, *angle - delta, approx);
+    distances->y = simShot(*power, *angle + delta, approx);
 
     // turn approx off and abort if appropriate
     if (((distances->x <= approx_target_threshold) || (distances->y <= approx_target_threshold)) && *approx)
     {
         Serial.println("Recalculating without approximations...");
         *approx = false;
-        *i = 0;
+        *i = -1;
         return;
     }
 
@@ -394,74 +384,33 @@ void NESPtonBot::iterate(double *power, Vec2d *power_limits, double *angle, Vec2
     if (distances->y > distances->x)
     {
         // we were too high
-        if (mode == ITERATE_ANGLES)
-            angle_limits->y = *angle;
-        else
-            power_limits->y = *power;
+        angle_limits->y = *angle;
     }
     else
     {
         // we were too low
-        if (mode == ITERATE_ANGLES)
-            angle_limits->x = *angle;
-        else
-            power_limits->x = *power;
+        angle_limits->x = *angle;
     }
-
-    /*
-    // check and adjust limits accordingly
-    if (mode == ITERATE_ANGLES)
-    {
-        if (distances->y > distances->x)
-        {
-            // we were too high
-            angle_limits->y = *angle;
-        }
-        else
-        {
-            // we were too low
-            angle_limits->x = *angle;
-        }
-    }
-    else
-    {
-        if (distances->y > distances->x)
-        {
-            // we were too high
-            power_limits->y = *power;
-        }
-        else
-        {
-            // we were too low
-            power_limits->x = *power;
-        }
-    }*/
 
     // check for field change that would make simulation invalid
     if (checkForAbortCondition())
     {
-        *state = -1;
+        *state = -2;
         return;
     }
 
+    // return if still approximating
+    if (*approx)
+        return;
+
     // check for hit and set launch vars accordingly
-    if (!(*approx) && (distances->x == 0 || distances->y == 0))
+    if (distances->x == 0 || distances->y == 0)
     {
         *state = 1;
-        if (mode == ITERATE_ANGLES)
-        {
-            if (distances->x == 0)
-                *angle = *angle - delta;
-            else
-                *angle = *angle + delta;
-        }
+        if (distances->x == 0)
+            *angle = *angle - delta;
         else
-        {
-            if (distances->y == 0)
-                *angle = *angle - delta;
-            else
-                *angle = *angle + delta;
-        }
+            *angle = *angle + delta;
         return;
     }
 }
@@ -520,15 +469,17 @@ void NESPtonBot::targetPlayers()
     }
     if (target_id == 255)
         return;
-    bool success;
+    int state;
     Serial.printf("begin scan for player %d\n", target_id);
     Vec2d launch_params;
     launch_params.x = 0;
     launch_params.y = 0;
-    scanFor(&success, &launch_params);
-    if (!success)
+    scanFor(&state, &launch_params);
+    if (state == -2)
         return;
-    client.printf("v %2.1f\n%f\n", launch_params.x, degrees(launch_params.y));
-    client.flush();
+    if (state == 1){
+        client.printf("v %2.1f\n%f\n", launch_params.x, degrees(launch_params.y));
+        client.flush();
+    }
     addToIgnored(ignored, target_id);
 }

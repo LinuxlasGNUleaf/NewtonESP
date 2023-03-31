@@ -21,10 +21,10 @@ inline const char *name = "nESPton";
 const unsigned int A = 2000000;
 
 const uint8_t max_players = 12;
-const uint8_t num_planets = 24;
-
+const uint8_t max_planets = 30;
 const double battlefieldW = sqrt(A * 16 / 9); /* 1885 */
 const double battlefieldH = sqrt(A * 9 / 16); /* 1060 */
+const double battlefieldD = sqrt(A*337/12); /* 2163.45 */
 const double player_size = 4.0;
 const int margin = 500;
 
@@ -43,11 +43,6 @@ const int max_iterations = 12;
 
 const double approx_target_threshold = 30*30;
 const double r2_abort_mult = 1.5;
-
-
-// for ease of use only
-#define ITERATE_ANGLES true
-#define ITERATE_POWER false
 
 // fine scan settings
 const int fine_steps = 40;
