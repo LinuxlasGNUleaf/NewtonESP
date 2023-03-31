@@ -40,6 +40,7 @@ public:
     void scanFor(bool *success, Vec2d *launch_params);
     bool checkForAbortCondition();
     void targetPlayers();
+    void iterate(double *power, Vec2d *power_limits, double *angle, Vec2d *angle_limits, Vec2d *distances, bool *approx, int *i, int *state, bool mode);
 };
 
 #endif

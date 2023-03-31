@@ -34,14 +34,20 @@ const unsigned int segment_steps = 25;
 
 
 // scan settings
+
 const double min_power = 13;
 const double power_inc = 1.5;
 const double max_power = 19;
-const double d_angle_divisor = 1.1;
+const double delta_divisor = 1/(2*1.1);
 const int max_iterations = 12;
 
 const double approx_target_threshold = 30*30;
 const double r2_abort_mult = 1.5;
+
+
+// for ease of use only
+#define ITERATE_ANGLES true
+#define ITERATE_POWER false
 
 // fine scan settings
 const int fine_steps = 40;
